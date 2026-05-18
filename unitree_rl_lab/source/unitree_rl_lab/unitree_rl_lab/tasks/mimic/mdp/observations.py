@@ -3,7 +3,7 @@ from __future__ import annotations
 import torch
 from typing import TYPE_CHECKING
 
-from isaaclab.utils.math import matrix_from_quat, subtract_frame_transforms
+from unitree_rl_lab.utils.safe_math import matrix_from_quat, subtract_frame_transforms
 
 from unitree_rl_lab.tasks.mimic.mdp.commands import MotionCommand
 
