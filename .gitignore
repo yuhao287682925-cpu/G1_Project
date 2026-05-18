@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.swp
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+dist/
+.eggs/
+*.egg-info/
+.installed.cfg
+*.egg
+# Pytest
+.pytest_cache/
+# mypy
+.mypy_cache/
+# IDEs
+.vscode/
+.idea/
+# Jupyter
+.ipynb_checkpoints/
+# Distribution / packaging
+pip-wheel-metadata/
+# Unitree / large binaries
+*.npz
+*.npy
+*.so
+*.egg
+# Local env
+.env
+# logs
+*.log
