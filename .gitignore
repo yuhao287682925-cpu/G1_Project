@@ -29,6 +29,7 @@ pip-wheel-metadata/
 # Unitree / large binaries
 *.npz
 *.npy
+!xinjiang_amp_fixed.npz
 *.so
 *.egg
 # Local env
