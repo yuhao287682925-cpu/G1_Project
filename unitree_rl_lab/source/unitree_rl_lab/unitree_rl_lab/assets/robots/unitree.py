@@ -9,6 +9,7 @@ Reference: https://github.com/unitreerobotics/unitree_ros
 """
 
 import os
+import warnings
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import IdealPDActuatorCfg, ImplicitActuatorCfg
@@ -17,15 +18,17 @@ from isaaclab.utils import configclass
 
 from unitree_rl_lab.assets.robots import unitree_actuators
 
-UNITREE_MODEL_DIR = os.environ.get("UNITREE_MODEL_DIR", "path/to/unitree_model")
-UNITREE_ROS_DIR = os.environ.get("UNITREE_ROS_DIR", "/root/G1_Project/unitree_rl_lab/unitree_ros")
+UNITREE_MODEL_DIR = "path/to/unitree_model"  # Replace with the actual path to your unitree_model directory
+UNITREE_ROS_DIR = "/root/G1_Project/unitree_rl_lab/unitree_ros"  # Replace with the actual path to your unitree_ros package
 
 
 def _warn_if_placeholder_path(path: str, var_name: str):
     if path.startswith("path/to/"):
-        raise FileNotFoundError(
+        warnings.warn(
             f"{var_name} is not configured. Set the environment variable {var_name} to the real asset path, "
-            f"for example: export {var_name}=/abs/path/to/unitree_model"
+            f"for example: export {var_name}=/abs/path/to/unitree_model",
+            UserWarning,
+            stacklevel=2,
         )
 
 
