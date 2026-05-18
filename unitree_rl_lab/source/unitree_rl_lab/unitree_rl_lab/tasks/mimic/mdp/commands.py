@@ -31,24 +31,77 @@ class MotionLoader:
     def __init__(self, motion_file: str, body_indexes: Sequence[int], device: str = "cpu", motion_fps: float | None = None):
         assert os.path.isfile(motion_file), f"Invalid file path: {motion_file}"
         data = np.load(motion_file)
+
         # Prefer stored fps in archive, otherwise use provided fallback motion_fps
         if "fps" in data:
             self.fps = float(data["fps"])
         elif motion_fps is not None:
             self.fps = float(motion_fps)
         else:
-            raise KeyError(
-                "'fps' key not found in motion archive and no motion_fps fallback provided. "
-                "Set MotionCommandCfg.motion_fps or ensure the NPZ includes 'fps'."
-            )
-        self.joint_pos = torch.tensor(data["joint_pos"], dtype=torch.float32, device=device)
-        self.joint_vel = torch.tensor(data["joint_vel"], dtype=torch.float32, device=device)
-        self._body_pos_w = torch.tensor(data["body_pos_w"], dtype=torch.float32, device=device)
-        self._body_quat_w = torch.tensor(data["body_quat_w"], dtype=torch.float32, device=device)
-        self._body_lin_vel_w = torch.tensor(data["body_lin_vel_w"], dtype=torch.float32, device=device)
-        self._body_ang_vel_w = torch.tensor(data["body_ang_vel_w"], dtype=torch.float32, device=device)
+            # fallback to 60 Hz if nothing provided
+            self.fps = 60.0
+
+        # Support different key names produced by various preprocessors
+        if "joint_pos" in data:
+            joint_pos_np = data["joint_pos"]
+        elif "dof_pos" in data:
+            joint_pos_np = data["dof_pos"]
+        else:
+            raise KeyError("motion archive missing 'joint_pos' or 'dof_pos'")
+
+        if "joint_vel" in data:
+            joint_vel_np = data["joint_vel"]
+        elif "dof_vel" in data:
+            joint_vel_np = data["dof_vel"]
+        else:
+            # default to zeros if velocities missing
+            joint_vel_np = np.zeros_like(joint_pos_np)
+
+        # body positions/quaternions: prefer explicit arrays, otherwise map from root_{pos,rot}
+        if "body_pos_w" in data:
+            body_pos_np = data["body_pos_w"]
+        elif "root_pos" in data:
+            # root_pos is (T,3) -> expand to (T,1,3)
+            body_pos_np = data["root_pos"][..., None, :]
+        else:
+            # fallback: zeros with a single body
+            body_pos_np = np.zeros((joint_pos_np.shape[0], 1, 3), dtype=np.float32)
+
+        if "body_quat_w" in data:
+            body_quat_np = data["body_quat_w"]
+        elif "root_rot" in data:
+            # root_rot is (T,4) -> expand to (T,1,4)
+            body_quat_np = data["root_rot"][..., None, :]
+        else:
+            # fallback to identity quaternion
+            T = joint_pos_np.shape[0]
+            body_quat_np = np.zeros((T, 1, 4), dtype=np.float32)
+            body_quat_np[..., 0] = 1.0
+
+        # linear and angular velocities for bodies: prefer explicit, otherwise zeros
+        if "body_lin_vel_w" in data:
+            body_lin_vel_np = data["body_lin_vel_w"]
+        elif "root_lin_vel" in data:
+            body_lin_vel_np = data["root_lin_vel"][..., None, :]
+        else:
+            body_lin_vel_np = np.zeros_like(body_pos_np)
+
+        if "body_ang_vel_w" in data:
+            body_ang_vel_np = data["body_ang_vel_w"]
+        elif "root_ang_vel" in data:
+            body_ang_vel_np = data["root_ang_vel"][..., None, :]
+        else:
+            body_ang_vel_np = np.zeros((joint_pos_np.shape[0], body_pos_np.shape[1], 3), dtype=np.float32)
+
+        # convert to torch tensors
+        self.joint_pos = torch.tensor(joint_pos_np, dtype=torch.float32, device=device)
+        self.joint_vel = torch.tensor(joint_vel_np, dtype=torch.float32, device=device)
+        self._body_pos_w = torch.tensor(body_pos_np, dtype=torch.float32, device=device)
+        self._body_quat_w = torch.tensor(body_quat_np, dtype=torch.float32, device=device)
+        self._body_lin_vel_w = torch.tensor(body_lin_vel_np, dtype=torch.float32, device=device)
+        self._body_ang_vel_w = torch.tensor(body_ang_vel_np, dtype=torch.float32, device=device)
         self._body_indexes = body_indexes
-        self.time_step_total = self.joint_pos.shape[0]
+        self.time_step_total = int(self.joint_pos.shape[0])
 
     @property
     def body_pos_w(self) -> torch.Tensor:
