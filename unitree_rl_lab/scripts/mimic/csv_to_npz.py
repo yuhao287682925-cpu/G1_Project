@@ -35,10 +35,9 @@ AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
 args_cli = parser.parse_args()
 if not args_cli.output_name:
+    import os
     # generate at the same location as input file
-    args_cli.output_name = (
-        "/".join(args_cli.input_file.split("/")[:-1]) + "/" + args_cli.input_file.split("/")[-1].replace(".csv", ".npz")
-    )
+    args_cli.output_name = os.path.splitext(args_cli.input_file)[0] + ".npz"
 
 
 # launch omniverse app
