@@ -183,6 +183,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # NEW: rsl_rl 2.3.1 expects `obs` to be a dict if `obs_groups` is defined.
     # However, older IsaacLab RslRlVecEnvWrapper returns (policy_tensor, extras).
     # We must reconstruct the obs dictionary by extracting critic from extras["observations"]["critic"].
+    
+    class ObsDict(dict):
+        def to(self, device):
+            return ObsDict({k: v.to(device) if hasattr(v, "to") else v for k, v in self.items()})
+
     class DictObsWrapper:
         def __init__(self, env):
             self.env = env
@@ -194,7 +199,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                 self.get_privileged_observations = env.get_privileged_observations
         
         def _build_obs_dict(self, policy_tensor, extras):
-            obs_dict = {"policy": policy_tensor}
+            obs_dict = ObsDict({"policy": policy_tensor})
             if isinstance(extras, dict) and "observations" in extras and "critic" in extras["observations"]:
                 obs_dict["critic"] = extras["observations"]["critic"]
             return obs_dict
@@ -323,8 +328,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                     return result
 
                 runner.alg.update = wrapped_update
-        except Exception:
-            print("[WARN] AMP initialization failed; continuing without AMP discriminator.")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"[WARN] AMP initialization failed; continuing without AMP discriminator. Error: {e}")
     # write git state to logs
     runner.add_git_repo_to_log(__file__)
     # load the checkpoint
