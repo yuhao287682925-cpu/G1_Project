@@ -182,8 +182,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     # create runner from rsl-rl
     agent_cfg_dict = agent_cfg.to_dict()
-    if "obs_groups" not in agent_cfg_dict:
-        agent_cfg_dict["obs_groups"] = None
+    if "obs_groups" not in agent_cfg_dict or agent_cfg_dict["obs_groups"] is None:
+        agent_cfg_dict["obs_groups"] = {"policy": ["policy"], "critic": ["critic"]}
     runner = OnPolicyRunner(env, agent_cfg_dict, log_dir=log_dir, device=agent_cfg.device)
     # Attach AMP discriminator and expert buffer when amp_algorithm is present
     if hasattr(agent_cfg, "amp_algorithm"):
