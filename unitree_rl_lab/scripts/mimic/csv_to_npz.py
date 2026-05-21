@@ -236,7 +236,7 @@ def run_simulator(sim: sim_utils.SimulationContext, scene: InteractiveScene):
 
     # ------- data logger -------------------------------------------------------
     log = {
-        "fps": [args_cli.output_fps],
+        "fps": args_cli.output_fps,
         "joint_pos": [],
         "joint_vel": [],
         "body_pos_w": [],
