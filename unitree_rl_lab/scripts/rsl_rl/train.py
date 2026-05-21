@@ -192,27 +192,46 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                 self.get_privileged_observations = env.get_privileged_observations
         
         def _convert_obs(self, obs):
-            if isinstance(obs, tuple):
-                if len(obs) >= 2:
-                    return {"policy": obs[0], "critic": obs[1]}
-                elif len(obs) == 1:
-                    return {"policy": obs[0]}
+            # If obs is a tuple, convert to dict. IsaacLab used to return (policy_obs, critic_obs) for multiple groups
+            if isinstance(obs, tuple) and len(obs) >= 1:
+                # If it's a tuple of tensors (policy, critic)
+                if isinstance(obs[0], torch.Tensor):
+                    if len(obs) >= 2 and isinstance(obs[1], torch.Tensor):
+                        return {"policy": obs[0], "critic": obs[1]}
+                    elif len(obs) == 1:
+                        return {"policy": obs[0]}
             return obs
 
         def step(self, actions):
-            obs, rew, done, extras = self.env.step(actions)
-            return self._convert_obs(obs), rew, done, extras
+            # step usually returns obs, rew, done, extras
+            res = self.env.step(actions)
+            if len(res) == 4:
+                obs, rew, done, extras = res
+                return self._convert_obs(obs), rew, done, extras
+            elif len(res) == 5:
+                obs, rew, term, trunc, extras = res
+                return self._convert_obs(obs), rew, term, trunc, extras
+            return res
             
         def reset(self, *args, **kwargs):
             res = self.env.reset(*args, **kwargs)
+            # reset usually returns obs, extras
             if isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], dict):
                 obs, extras = res
                 return self._convert_obs(obs), extras
             return res
             
         def get_observations(self):
-            obs, extras = self.env.get_observations()
-            return self._convert_obs(obs), extras
+            # get_observations might return obs OR (obs, extras).
+            # If OnPolicyRunner expects just obs, we MUST return just obs!
+            # Since the error was "tuple has no attribute keys", OnPolicyRunner did NOT unpack the return value,
+            # meaning it did `obs = env.get_observations()`, and our return value `(obs, extras)` became a tuple.
+            res = self.env.get_observations()
+            if isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], dict):
+                obs, extras = res
+                return self._convert_obs(obs)
+            else:
+                return self._convert_obs(res)
             
         def __getattr__(self, name):
             return getattr(self.env, name)
