@@ -180,6 +180,45 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
+    # NEW: rsl_rl expects obs to be a dict if obs_groups is used, but older IsaacLab returns a tuple (policy_obs, critic_obs)
+    class DictObsWrapper:
+        def __init__(self, env):
+            self.env = env
+            self.observation_space = env.observation_space
+            self.action_space = env.action_space
+            self.num_envs = getattr(env, "num_envs", 1)
+            self.device = getattr(env, "device", "cpu")
+            if hasattr(env, "get_privileged_observations"):
+                self.get_privileged_observations = env.get_privileged_observations
+        
+        def _convert_obs(self, obs):
+            if isinstance(obs, tuple):
+                if len(obs) >= 2:
+                    return {"policy": obs[0], "critic": obs[1]}
+                elif len(obs) == 1:
+                    return {"policy": obs[0]}
+            return obs
+
+        def step(self, actions):
+            obs, rew, done, extras = self.env.step(actions)
+            return self._convert_obs(obs), rew, done, extras
+            
+        def reset(self, *args, **kwargs):
+            res = self.env.reset(*args, **kwargs)
+            if isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], dict):
+                obs, extras = res
+                return self._convert_obs(obs), extras
+            return res
+            
+        def get_observations(self):
+            obs, extras = self.env.get_observations()
+            return self._convert_obs(obs), extras
+            
+        def __getattr__(self, name):
+            return getattr(self.env, name)
+
+    env = DictObsWrapper(env)
+
     # create runner from rsl-rl
     agent_cfg_dict = agent_cfg.to_dict()
     if "obs_groups" not in agent_cfg_dict or agent_cfg_dict["obs_groups"] is None:
