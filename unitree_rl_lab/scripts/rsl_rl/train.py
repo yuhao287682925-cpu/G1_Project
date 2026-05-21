@@ -227,12 +227,14 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                         expert_trans = env.amp_expert_buffer.sample_transition(batch_size, step_dt=1.0 / env.amp_expert_buffer.motion_fps)
                         # sample policy transitions from recent buffer
                         policy_buf = getattr(env, "amp_recent_transitions", [])
-                        if len(policy_buf) < batch_size:
+                        if len(policy_buf) * getattr(env, "num_envs", 1) < batch_size:
                             return result
-                        import random
 
-                        idx = random.sample(range(len(policy_buf)), batch_size)
-                        policy_trans = torch.stack([policy_buf[i] for i in idx], dim=0).to(agent_cfg.device)
+                        num_envs = policy_buf[0].shape[0]
+                        idx = torch.randint(0, len(policy_buf), (batch_size,))
+                        env_idx = torch.randint(0, num_envs, (batch_size,))
+                        
+                        policy_trans = torch.stack([policy_buf[i][e] for i, e in zip(idx, env_idx)], dim=0).to(agent_cfg.device)
 
                         # move expert transitions to device
                         expert_trans = expert_trans.to(agent_cfg.device)
@@ -258,9 +260,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                         loss.backward()
                         torch.nn.utils.clip_grad_norm_(amp_disc.parameters(), float(getattr(agent_cfg.amp_algorithm, "max_grad_norm", 1.0)))
                         amp_opt.step()
-                    except Exception:
-                        # be conservative: if anything fails, don't crash training
-                        pass
+                    except Exception as e:
+                        import traceback
+                        traceback.print_exc()
+                        print(f"[WARN] AMP Discriminator update failed: {e}")
 
                     return result
 

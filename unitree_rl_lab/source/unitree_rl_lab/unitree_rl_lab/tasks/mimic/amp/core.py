@@ -241,8 +241,14 @@ def amp_style_reward_term(env, asset_cfg=None):
         if not hasattr(env, "amp_recent_transitions") or env.amp_recent_transitions is None:
             env.amp_recent_transitions = []
         env.amp_recent_transitions.append(cpu_transition)
+        
+        # Calculate dynamic buffer cap to avoid massive memory leaks
+        # E.g. limit to around 256,000 transitions total across all envs
+        num_envs_current = getattr(env, "num_envs", 1)
+        max_buffer_len = max(1, 256000 // num_envs_current)
+        
         # keep reasonable cap
-        if len(env.amp_recent_transitions) > 16384:
+        if len(env.amp_recent_transitions) > max_buffer_len:
             env.amp_recent_transitions.pop(0)
     except Exception:
         # best-effort, ignore buffer if push fails
