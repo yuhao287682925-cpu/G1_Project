@@ -89,9 +89,6 @@ class CommandsCfg:
         # generate npz file before training
         # python python scripts/mimic/csv_to_npz.py -f path/to/G1_Take_102.bvh_60hz.csv --input_fps 60
         # Use the centralized NPZ produced for AMP testing
-        motion_file="{ENV_REGEX_NS}/../../../../../../../../XingJiang002.npz", # Fallback for IsaacLab string resolver if needed, or absolute path
-        # But wait, IsaacLab resolves {ENV_REGEX_NS} to string, so it's safer to use absolute or relative to script.
-        # Actually, if we just put the exact absolute path that user has:
         motion_file="/root/G1_Project/XingJiang002.npz",
         anchor_body_name="torso_link",
         resampling_time_range=(1.0e9, 1.0e9),
