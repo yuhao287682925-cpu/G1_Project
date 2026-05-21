@@ -1,51 +1,34 @@
 import pickle
 import numpy as np
 import argparse
-import os
 
 def main():
-    parser = argparse.ArgumentParser(description="提取并计算 AMP 数据 (兼容 G1_Project)")
-    parser.add_argument("--input", type=str, default="XingJiang002.pkl", help="输入的 pkl 动作文件路径")
-    parser.add_argument("--output", type=str, default="xinjiang_amp_fixed.npz", help="输出的 npz 动作文件路径")
+    parser = argparse.ArgumentParser(description="Extract AMP data from pkl to csv for csv_to_npz.py")
+    parser.add_argument("--input", type=str, required=True, help="Input pkl file path")
+    parser.add_argument("--output", type=str, required=True, help="Output csv file path")
     args = parser.parse_args()
 
-    input_path = args.input
-    output_path = args.output
-
-    if not os.path.exists(input_path):
-        print(f"错误: 找不到输入文件 {input_path}")
-        return
-
-    # 加载原始 PKL
-    with open(input_path, 'rb') as f:
+    # 读取pkl文件
+    with open(args.input, 'rb') as f:
         data = pickle.load(f)
 
-    # 提取数组 (确保维度为 [Frames, 29])
-    # X 为前方，Z 为上方
-    dof_pos = data['dof_pos'] 
-    root_pos = data['root_pos']
-    root_rot = data['root_rot']
-
-    # 获取或计算时间步长 dt
+    # 提取所需的基础动作数据
+    dof_pos = data['dof_pos']      # (T, 29)
+    root_pos = data['root_pos']    # (T, 3)
+    root_rot = data['root_rot']    # (T, 4) in xyzw format
     fps = data.get('fps', 50.0)
-    dt = 1.0 / fps
+    
+    print(f"[INFO] Loaded {args.input}: {root_pos.shape[0]} frames at {fps} FPS")
 
-    # 使用中心差分计算速度 (dof_vel 和 root_lin_vel)
-    # np.gradient 沿 axis=0 (帧) 对所有坐标轴进行求导
-    dof_vel = np.gradient(dof_pos, axis=0) / dt
-    root_lin_vel = np.gradient(root_pos, axis=0) / dt
+    # CSV格式要求: Nx36
+    # [root_pos_x, root_pos_y, root_pos_z, root_rot_x, root_rot_y, root_rot_z, root_rot_w, dof_0...dof_28]
+    csv_data = np.concatenate([root_pos, root_rot, dof_pos], axis=1)
 
-    # 使用 savez 保存为非 object 格式
-    np.savez(output_path, 
-             dof_pos=dof_pos.astype(np.float32), 
-             dof_vel=dof_vel.astype(np.float32),
-             root_pos=root_pos.astype(np.float32),
-             root_rot=root_rot.astype(np.float32),
-             root_lin_vel=root_lin_vel.astype(np.float32))
-             
-    print(f"数据处理完毕，共处理 {dof_pos.shape[0]} 帧数据。")
-    print(f"帧率(fps): {fps}, 计算时间差(dt): {dt:.4f}s")
-    print(f"已保存为兼容性最强的 .npz 格式至: {output_path}")
+    np.savetxt(args.output, csv_data, delimiter=",", fmt="%.6f")
+    print(f"[SUCCESS] CSV saved to {args.output}")
+    print(f"\n--- NEXT STEP ON LINUX ---")
+    print(f"To get the final `.npz` file with full body kinematics tracking (body_pos_w), run:")
+    print(f"python unitree_rl_lab/scripts/mimic/csv_to_npz.py -f {args.output} --input_fps {int(fps)}")
 
 if __name__ == "__main__":
     main()
