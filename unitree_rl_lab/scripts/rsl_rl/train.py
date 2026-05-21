@@ -180,7 +180,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
-    # NEW: rsl_rl expects obs to be a dict if obs_groups is used, but older IsaacLab returns a tuple (policy_obs, critic_obs)
+    # NEW: rsl_rl 2.3.1 expects `obs` to be a dict if `obs_groups` is defined.
+    # However, older IsaacLab RslRlVecEnvWrapper returns (policy_tensor, extras).
+    # We must reconstruct the obs dictionary by extracting critic from extras["observations"]["critic"].
     class DictObsWrapper:
         def __init__(self, env):
             self.env = env
@@ -191,47 +193,39 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             if hasattr(env, "get_privileged_observations"):
                 self.get_privileged_observations = env.get_privileged_observations
         
-        def _convert_obs(self, obs):
-            # If obs is a tuple, convert to dict. IsaacLab used to return (policy_obs, critic_obs) for multiple groups
-            if isinstance(obs, tuple) and len(obs) >= 1:
-                # If it's a tuple of tensors (policy, critic)
-                if isinstance(obs[0], torch.Tensor):
-                    if len(obs) >= 2 and isinstance(obs[1], torch.Tensor):
-                        return {"policy": obs[0], "critic": obs[1]}
-                    elif len(obs) == 1:
-                        return {"policy": obs[0]}
-            return obs
+        def _build_obs_dict(self, policy_tensor, extras):
+            obs_dict = {"policy": policy_tensor}
+            if isinstance(extras, dict) and "observations" in extras and "critic" in extras["observations"]:
+                obs_dict["critic"] = extras["observations"]["critic"]
+            return obs_dict
 
         def step(self, actions):
-            # step usually returns obs, rew, done, extras
+            # step usually returns 4 or 5 elements
             res = self.env.step(actions)
             if len(res) == 4:
                 obs, rew, done, extras = res
-                return self._convert_obs(obs), rew, done, extras
+                return self._build_obs_dict(obs, extras), rew, done, extras
             elif len(res) == 5:
                 obs, rew, term, trunc, extras = res
-                return self._convert_obs(obs), rew, term, trunc, extras
+                return self._build_obs_dict(obs, extras), rew, term, trunc, extras
             return res
             
         def reset(self, *args, **kwargs):
             res = self.env.reset(*args, **kwargs)
-            # reset usually returns obs, extras
-            if isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], dict):
+            if isinstance(res, tuple) and len(res) == 2:
                 obs, extras = res
-                return self._convert_obs(obs), extras
+                return self._build_obs_dict(obs, extras), extras
             return res
             
         def get_observations(self):
-            # get_observations might return obs OR (obs, extras).
-            # If OnPolicyRunner expects just obs, we MUST return just obs!
-            # Since the error was "tuple has no attribute keys", OnPolicyRunner did NOT unpack the return value,
-            # meaning it did `obs = env.get_observations()`, and our return value `(obs, extras)` became a tuple.
+            # rsl_rl's OnPolicyRunner does `obs = env.get_observations()` (no unpacking!)
+            # So we MUST return ONLY the dictionary, and discard extras here,
+            # because returning a tuple makes `obs` a tuple, which crashes.
             res = self.env.get_observations()
-            if isinstance(res, tuple) and len(res) == 2 and isinstance(res[1], dict):
+            if isinstance(res, tuple) and len(res) == 2:
                 obs, extras = res
-                return self._convert_obs(obs)
-            else:
-                return self._convert_obs(res)
+                return self._build_obs_dict(obs, extras)
+            return res
             
         def __getattr__(self, name):
             return getattr(self.env, name)
