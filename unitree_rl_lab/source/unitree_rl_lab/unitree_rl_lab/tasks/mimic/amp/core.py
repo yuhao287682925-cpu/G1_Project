@@ -108,8 +108,18 @@ class AmpExpertBuffer:
 
         self.dof_pos = torch.as_tensor(loaded[dof_pos_key], dtype=torch.float32, device=self.device)
         self.dof_vel = torch.as_tensor(loaded[dof_vel_key], dtype=torch.float32, device=self.device)
-        self.root_pos = torch.as_tensor(loaded[root_pos_key], dtype=torch.float32, device=self.device)
-        self.root_rot = torch.as_tensor(loaded[root_rot_key], dtype=torch.float32, device=self.device)
+        
+        root_pos_tensor = torch.as_tensor(loaded[root_pos_key], dtype=torch.float32, device=self.device)
+        root_rot_tensor = torch.as_tensor(loaded[root_rot_key], dtype=torch.float32, device=self.device)
+        
+        # If it contains all bodies (frames, num_bodies, 3), extract only the root (index 0)
+        if root_pos_tensor.ndim == 3:
+            root_pos_tensor = root_pos_tensor[:, 0, :]
+        if root_rot_tensor.ndim == 3:
+            root_rot_tensor = root_rot_tensor[:, 0, :]
+            
+        self.root_pos = root_pos_tensor
+        self.root_rot = root_rot_tensor
 
         if self.dof_pos.ndim != 2 or self.dof_vel.ndim != 2:
             raise ValueError("dof_pos and dof_vel must have shape [frames, dof].")
