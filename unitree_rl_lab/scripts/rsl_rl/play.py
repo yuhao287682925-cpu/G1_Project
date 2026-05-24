@@ -114,14 +114,67 @@ def main():
     # wrap around environment for rsl-rl
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
+    class ObsDict(dict):
+        def to(self, device):
+            return ObsDict({k: v.to(device) if hasattr(v, "to") else v for k, v in self.items()})
+
+    class DictObsWrapper:
+        def __init__(self, env):
+            self.env = env
+            self.observation_space = env.observation_space
+            self.action_space = env.action_space
+            self.num_envs = getattr(env, "num_envs", 1)
+            self.device = getattr(env, "device", "cpu")
+            if hasattr(env, "get_privileged_observations"):
+                self.get_privileged_observations = env.get_privileged_observations
+        
+        def _build_obs_dict(self, policy_tensor, extras):
+            obs_dict = ObsDict({"policy": policy_tensor})
+            if isinstance(extras, dict) and "observations" in extras and "critic" in extras["observations"]:
+                obs_dict["critic"] = extras["observations"]["critic"]
+            return obs_dict
+
+        def step(self, actions):
+            res = self.env.step(actions)
+            if len(res) == 4:
+                obs, rew, done, extras = res
+                return self._build_obs_dict(obs, extras), rew, done, extras
+            elif len(res) == 5:
+                obs, rew, term, trunc, extras = res
+                return self._build_obs_dict(obs, extras), rew, term, trunc, extras
+            return res
+            
+        def reset(self, *args, **kwargs):
+            res = self.env.reset(*args, **kwargs)
+            if isinstance(res, tuple) and len(res) == 2:
+                obs, extras = res
+                return self._build_obs_dict(obs, extras), extras
+            return res
+            
+        def get_observations(self):
+            res = self.env.get_observations()
+            if isinstance(res, tuple) and len(res) == 2:
+                obs, extras = res
+                return self._build_obs_dict(obs, extras)
+            return res
+            
+        def __getattr__(self, name):
+            return getattr(self.env, name)
+
+    env = DictObsWrapper(env)
+    
+    agent_cfg_dict = agent_cfg.to_dict()
+    if "obs_groups" not in agent_cfg_dict or agent_cfg_dict["obs_groups"] is None:
+        agent_cfg_dict["obs_groups"] = {"policy": ["policy"], "critic": ["critic"]}
+
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
     if not hasattr(agent_cfg, "class_name") or agent_cfg.class_name == "OnPolicyRunner":
-        runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+        runner = OnPolicyRunner(env, agent_cfg_dict, log_dir=None, device=agent_cfg.device)
     elif agent_cfg.class_name == "DistillationRunner":
         from rsl_rl.runners import DistillationRunner
 
-        runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+        runner = DistillationRunner(env, agent_cfg_dict, log_dir=None, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     runner.load(resume_path)
