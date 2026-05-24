@@ -101,10 +101,15 @@ class AmpExpertBuffer:
         if self.motion_fps <= 0.0:
             raise ValueError("AMP reference data must provide fps or motion_fps must be specified.")
 
-        self.dof_pos = torch.as_tensor(loaded["dof_pos"], dtype=torch.float32, device=self.device)
-        self.dof_vel = torch.as_tensor(loaded["dof_vel"], dtype=torch.float32, device=self.device)
-        self.root_pos = torch.as_tensor(loaded["root_pos"], dtype=torch.float32, device=self.device)
-        self.root_rot = torch.as_tensor(loaded["root_rot"], dtype=torch.float32, device=self.device)
+        dof_pos_key = "dof_pos" if "dof_pos" in loaded else "joint_pos"
+        dof_vel_key = "dof_vel" if "dof_vel" in loaded else "joint_vel"
+        root_pos_key = "root_pos" if "root_pos" in loaded else "body_pos_w"
+        root_rot_key = "root_rot" if "root_rot" in loaded else "body_quat_w"
+
+        self.dof_pos = torch.as_tensor(loaded[dof_pos_key], dtype=torch.float32, device=self.device)
+        self.dof_vel = torch.as_tensor(loaded[dof_vel_key], dtype=torch.float32, device=self.device)
+        self.root_pos = torch.as_tensor(loaded[root_pos_key], dtype=torch.float32, device=self.device)
+        self.root_rot = torch.as_tensor(loaded[root_rot_key], dtype=torch.float32, device=self.device)
 
         if self.dof_pos.ndim != 2 or self.dof_vel.ndim != 2:
             raise ValueError("dof_pos and dof_vel must have shape [frames, dof].")
