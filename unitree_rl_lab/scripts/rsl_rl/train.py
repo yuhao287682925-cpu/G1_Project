@@ -251,7 +251,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             # build expert buffer
             expert_file = agent_cfg.amp_algorithm.expert_motion_file
             expert_fps = getattr(agent_cfg.amp_algorithm, "expert_motion_fps", None)
-            env.amp_expert_buffer = AmpExpertBuffer(expert_file, motion_fps=expert_fps, device=agent_cfg.device)
+            env.unwrapped.amp_expert_buffer = AmpExpertBuffer(expert_file, motion_fps=expert_fps, device=agent_cfg.device)
 
             # determine state dim from environment robot asset
             try:
@@ -266,10 +266,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             amp_opt = torch.optim.Adam(amp_disc.parameters(), lr=agent_cfg.amp_algorithm.discriminator_learning_rate)
 
             # attach to env so reward-term can access
-            env.amp_discriminator = amp_disc
-            env.amp_discriminator_opt = amp_opt
-            env.amp_style_scale = getattr(agent_cfg.amp_algorithm, "style_reward_scale", 0.0) * getattr(agent_cfg.amp_algorithm, "reward_ratio", 1.0)
-            env.amp_recent_transitions = []
+            env.unwrapped.amp_discriminator = amp_disc
+            env.unwrapped.amp_discriminator_opt = amp_opt
+            env.unwrapped.amp_style_scale = getattr(agent_cfg.amp_algorithm, "style_reward_scale", 0.0) * getattr(agent_cfg.amp_algorithm, "reward_ratio", 1.0)
+            env.unwrapped.amp_recent_transitions = []
 
             # monkeypatch runner.alg.update to alternate discriminator updates after PPO update
             if hasattr(runner, "alg") and hasattr(runner.alg, "update"):
@@ -284,10 +284,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                         # sample expert transitions
                         batch_size = int(getattr(agent_cfg.amp_algorithm, "discriminator_batch_size", 256))
                         device = amp_disc.next_device if hasattr(amp_disc, "next_device") else agent_cfg.device
-                        expert_trans = env.amp_expert_buffer.sample_transition(batch_size, step_dt=1.0 / env.amp_expert_buffer.motion_fps)
+                        expert_trans = env.unwrapped.amp_expert_buffer.sample_transition(batch_size, step_dt=1.0 / env.unwrapped.amp_expert_buffer.motion_fps)
                         # sample policy transitions from recent buffer
-                        policy_buf = getattr(env, "amp_recent_transitions", [])
-                        if len(policy_buf) * getattr(env, "num_envs", 1) < batch_size:
+                        policy_buf = getattr(env.unwrapped, "amp_recent_transitions", [])
+                        if len(policy_buf) * getattr(env.unwrapped, "num_envs", 1) < batch_size:
                             return result
 
                         num_envs = policy_buf[0].shape[0]
