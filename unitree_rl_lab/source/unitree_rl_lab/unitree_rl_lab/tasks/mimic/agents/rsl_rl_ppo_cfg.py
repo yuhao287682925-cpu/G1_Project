@@ -14,7 +14,7 @@ class AmpPpoAlgorithmCfg(RslRlPpoAlgorithmCfg):
     discriminator_learning_rate = 3.0e-4
     gradient_penalty_coef = 10.0
     discriminator_batch_size = 1024
-    expert_motion_file = "/home/robot/G1_Project/xinjiang_amp_fixed.npz"
+    expert_motion_file = "/root/G1_Project/XingJiang002.npz"
     expert_motion_fps = 50.0
     amp_state_dim = 59
     amp_transition_dim = 118
